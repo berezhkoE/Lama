@@ -31,3 +31,6 @@ clean:
 	$(MAKE) clean -C stdlib
 	$(MAKE) clean -C regression
 	$(MAKE) clean -C bench
+	$(MAKE) clean -C byterun
+	$(MAKE) clean -C interpreter
+	$(MAKE) clean -C performance
