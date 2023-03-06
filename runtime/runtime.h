@@ -35,8 +35,11 @@ extern "C"
 
 # define WORD_SIZE (CHAR_BIT * sizeof(int))
 
+extern size_t __gc_stack_top, __gc_stack_bottom;
+
 void failure (char *s, ...);
 void printValue (void *p);
+extern void __init (void);
 
 int Lread ();
 int Lwrite (int n);

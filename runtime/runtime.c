@@ -4,7 +4,7 @@
 
 # include "runtime.h"
 
-//# define __ENABLE_GC__
+# define __ENABLE_GC__
 # ifndef __ENABLE_GC__
 # define alloc malloc
 # endif
@@ -18,8 +18,6 @@ void print_indent (void) {
   printf("| ");
 }
 #endif
-
-extern size_t __gc_stack_top, __gc_stack_bottom;
 
 /* GC pool structure and data; declared here in order to allow debug print */
 typedef struct {

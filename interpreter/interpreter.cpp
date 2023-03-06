@@ -526,12 +526,43 @@ std::vector<Token> disassemble(bytefile *bf) {
   return result;
 }
 
+namespace stack {
+    const int SIZE = 1024 * 1024;
+
+    int inp_array[SIZE];
+    int* bottom = inp_array;
+    int* top = inp_array;
+
+    void push(int x) {
+      if (top - bottom > SIZE) {
+        std::cout <<"Overflow!" << std::endl;
+      } else {
+        *top = x;
+        top++;
+        __gc_stack_top = (size_t) top;
+      }
+    }
+
+    int pop() {
+      top--;
+      __gc_stack_top = (size_t) top;
+      return *top;
+    }
+
+    int peek() {
+      return *(top - 1);
+    }
+}
+
 int main(int argc, char *argv[]) {
   bytefile *f = read_file(argv[1]);
 
   std::vector<Token> tokens = disassemble(f);
 
-  std::vector<int> stack;
+  __gc_stack_bottom = (size_t) stack::inp_array;
+  __gc_stack_top = (size_t) stack::top;
+  __init();
+
   std::vector<Scope> scopes;
   std::vector<int> global_area(f->global_area_size);
 
@@ -544,101 +575,90 @@ int main(int argc, char *argv[]) {
     std::visit([&](auto &&arg) -> void {
         using T = std::decay_t<decltype(arg)>;
         if IS(BinOp, T) {
-          const auto y = UNBOX(stack.back());
-          stack.pop_back();
-          const auto x = UNBOX(stack.back());
-          stack.pop_back();
+          const auto y = UNBOX(stack::pop());
+          const auto x = UNBOX(stack::pop());
 
           switch (arg.op) {
             case Operator::PLUS:
-              stack.push_back(BOX(x + y));
+              stack::push(BOX(x + y));
               break;
 
             case Operator::MINUS:
-              stack.push_back(BOX(x - y));
+              stack::push(BOX(x - y));
               break;
 
             case Operator::MULT:
-              stack.push_back(BOX(x * y));
+              stack::push(BOX(x * y));
               break;
 
             case Operator::DIV:
-              stack.push_back(BOX(x / y));
+              stack::push(BOX(x / y));
               break;
 
             case Operator::MOD:
-              stack.push_back(BOX(x % y));
+              stack::push(BOX(x % y));
               break;
 
             case Operator::LT:
-              stack.push_back(BOX(x < y));
+              stack::push(BOX(x < y));
               break;
 
             case Operator::LE:
-              stack.push_back(BOX(x <= y));
+              stack::push(BOX(x <= y));
               break;
 
             case Operator::GT:
-              stack.push_back(BOX(x > y));
+              stack::push(BOX(x > y));
               break;
 
             case Operator::GE:
-              stack.push_back(BOX(x >= y));
+              stack::push(BOX(x >= y));
               break;
 
             case Operator::EQ:
-              stack.push_back(BOX(x == y));
+              stack::push(BOX(x == y));
               break;
 
             case Operator::NEQ:
-              stack.push_back(BOX(x != y));
+              stack::push(BOX(x != y));
               break;
 
             case Operator::DISJ:
-              stack.push_back(BOX(x || y));
+              stack::push(BOX(x || y));
               break;
 
             case Operator::CONJ:
-              stack.push_back(BOX(x && y));
+              stack::push(BOX(x && y));
               break;
 
             default:
               break;
           }
         } else if IS(Const, T) {
-          stack.push_back(arg.x);
+          stack::push(arg.x);
         } else if IS(Sexp, T) {
           auto tag = LtagHash(arg.s);
           auto bsexpTag = BsexpTag(BOX(arg.n + 1), tag);
           for (int j = 0; j < arg.n; ++j) {
-            Bsta((void *) stack.back(), BOX(arg.n - j - 1), bsexpTag);
-            stack.pop_back();
+            Bsta((void *) stack::pop(), BOX(arg.n - j - 1), bsexpTag);
           }
 
-          stack.push_back(int(bsexpTag));
+          stack::push(int(bsexpTag));
         } else if IS(Sti, T) {
-          auto value = stack.back();
-          stack.pop_back();
-          auto ref = stack.back();
-          stack.pop_back();
+          auto value = stack::pop();
+          auto ref = stack::pop();
           *(int *) ref = value;
-          stack.push_back(value);
+          stack::push(value);
         } else if IS(Sta, T) {
-          auto v = (void *) stack.back();
-          stack.pop_back();
+          auto v = (void *) stack::pop();
+          auto ind = stack::pop();
+          auto x = (void *) stack::pop();
 
-          auto ind = stack.back();
-          stack.pop_back();
-
-          auto x = (void *) stack.back();
-          stack.pop_back();
-
-          stack.push_back(int(Bsta(v, ind, x)));
+          stack::push(int(Bsta(v, ind, x)));
         } else if IS(Jmp, T) {
           i = arg.i - 1;
         } else if IS(CJmp, T) {
-          auto top = UNBOX(stack.back());
-          stack.pop_back();
+          auto top = UNBOX(stack::pop());
 
           if (arg.notZero && top != 0 || !arg.notZero && top == 0) {
             i = arg.i - 1;
@@ -649,8 +669,7 @@ int main(int argc, char *argv[]) {
 
           if (!rets.empty()) {
             for (size_t j = 0; j < arg.n; ++j) {
-              scopes.back().args[arg.n - j - 1] = stack.back();
-              stack.pop_back();
+              scopes.back().args[arg.n - j - 1] = stack::pop();
             }
           }
         } else if IS(End, T) {
@@ -665,86 +684,76 @@ int main(int argc, char *argv[]) {
           rets.push_back(i);
           i = arg.i - 1;
         } else if IS(Drop, T) {
-          stack.pop_back();
+          stack::pop();
         } else if IS(Dup, T) {
-          stack.push_back(stack.back());
+          stack::push(stack::peek());
         } else if IS(Swap, T) {
-          auto a = stack.back();
-          stack.pop_back();
-          auto b = stack.back();
-          stack.pop_back();
+          auto a = stack::pop();
+          auto b = stack::pop();
 
-          stack.push_back(a);
-          stack.push_back(b);
+          stack::push(a);
+          stack::push(b);
         } else if IS(Elem, T) {
-          auto ind = stack.back();
-          stack.pop_back();
+          auto ind = stack::pop();
+          auto p = (void *) stack::pop();
 
-          auto p = (void *) stack.back();
-          stack.pop_back();
-
-          stack.push_back(int(Belem(p, ind)));
+          stack::push(int(Belem(p, ind)));
         } else if IS(Ld, T) {
           std::visit([&](auto &&d) -> void {
               using D = std::decay_t<decltype(d)>;
               if IS(dsg::Const, D) {
-                stack.push_back(d.x);
+                stack::push(d.x);
               } else if IS(dsg::Global, D) {
-                stack.push_back(global_area[d.x]);
+                stack::push(global_area[d.x]);
               } else if IS(dsg::Local, D) {
-                stack.push_back(scopes.back().locals[d.x]);
+                stack::push(scopes.back().locals[d.x]);
               } else if IS(dsg::Arg, D) {
-                stack.push_back(scopes.back().args[d.x]);
+                stack::push(scopes.back().args[d.x]);
               }
           }, arg.d);
         } else if IS(Lda, T) {
           std::visit([&](auto &&d) -> void {
               using D = std::decay_t<decltype(d)>;
               if IS(dsg::Global, D) {
-                stack.push_back(global_area[d.x]);
+                stack::push(global_area[d.x]);
               } else if IS(dsg::Local, D) {
-                stack.push_back(scopes.back().locals[d.x]);
+                stack::push(scopes.back().locals[d.x]);
               } else if IS(dsg::Arg, D) {
-                stack.push_back(scopes.back().args[d.x]);
+                stack::push(scopes.back().args[d.x]);
               }
           }, arg.d);
         } else if IS(St, T) {
           std::visit([&](auto &&d) -> void {
               using D = std::decay_t<decltype(d)>;
               if IS(dsg::Global, D) {
-                global_area[d.x] = stack.back();
+                global_area[d.x] = stack::peek();
               } else if IS(dsg::Local, D) {
-                scopes.back().locals[d.x] = stack.back();
+                scopes.back().locals[d.x] = stack::peek();
               } else if IS(dsg::Arg, D) {
-                scopes.back().args[d.x] = stack.back();
+                scopes.back().args[d.x] = stack::peek();
               }
           }, arg.d);
         } else if IS(Tag, T) {
-          stack.push_back(Btag((void *) stack.back(), LtagHash(arg.s), BOX(arg.n)));
-          stack.pop_back();
+          stack::push(Btag((void *) stack::pop(), LtagHash(arg.s), BOX(arg.n)));
         } else if IS(Array, T) {
-          stack.push_back(Barray_patt((void *) stack.back(), BOX(arg.n)));
-          stack.pop_back();
+          stack::push(Barray_patt((void *) stack::pop(), BOX(arg.n)));
         } else if IS(call::Call, T) {
           std::visit([&](auto &&c) -> void {
               using C = std::decay_t<decltype(c)>;
               if IS(call::CallRead, C) {
-                stack.push_back(Lread());
+                stack::push(Lread());
               } else if IS(call::CallWrite, C) {
-                Lwrite(stack.back());
-                stack.pop_back();
-                stack.push_back(BOX(0));
+                Lwrite(stack::pop());
+                stack::push(BOX(0));
               } else if IS(call::CallArray, C) {
                 auto x = LmakeArray(BOX(c.n));
                 for (size_t i = 0; i < c.n; ++i) {
-                  Bsta((void *) stack.back(), BOX(c.n - i - 1), x);
-                  stack.pop_back();
+                  Bsta((void *) stack::pop(), BOX(c.n - i - 1), x);
                 }
-                stack.push_back(int(x));
+                stack::push(int(x));
               } else if IS(call::CallLength, C) {
-                auto res = Llength((void *) stack.back());
-                stack.pop_back();
-                stack.push_back(res);
+                auto res = Llength((void *) stack::pop());
+                stack::push(res);
               }
           }, arg);
         }
