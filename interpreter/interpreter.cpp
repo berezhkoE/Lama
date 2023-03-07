@@ -529,28 +529,31 @@ std::vector<Token> disassemble(bytefile *bf) {
 namespace stack {
     const int SIZE = 1024 * 1024;
 
-    int inp_array[SIZE];
-    int* bottom = inp_array;
-    int* top = inp_array;
+    int array[SIZE];
+    int top = -1;
 
     void push(int x) {
-      if (top - bottom > SIZE) {
-        std::cout <<"Overflow!" << std::endl;
-      } else {
-        *top = x;
-        top++;
-        __gc_stack_top = (size_t) top;
+      if (top >= SIZE) {
+        throw std::overflow_error("Stack Overflow");
       }
+      array[++top] = x;
+      __gc_stack_top = (size_t) &array[top];
     }
 
     int pop() {
-      top--;
-      __gc_stack_top = (size_t) top;
-      return *top;
+      if (top == -1) {
+        throw std::out_of_range("Stack Underflow");
+      }
+      int i = array[top--];
+      __gc_stack_top = (size_t) &array[top];
+      return i;
     }
 
     int peek() {
-      return *(top - 1);
+      if (top == -1) {
+        throw std::out_of_range("Stack Underflow");
+      }
+      return array[top];
     }
 }
 
@@ -559,8 +562,8 @@ int main(int argc, char *argv[]) {
 
   std::vector<Token> tokens = disassemble(f);
 
-  __gc_stack_bottom = (size_t) stack::inp_array;
-  __gc_stack_top = (size_t) stack::top;
+  __gc_stack_bottom = (size_t) &stack::array[stack::top];
+  __gc_stack_top = (size_t) &stack::array[stack::top];
   __init();
 
   std::vector<Scope> scopes;
