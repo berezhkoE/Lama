@@ -530,27 +530,27 @@ namespace stack {
     const int SIZE = 1024 * 1024;
 
     int array[SIZE];
-    int top = -1;
+    int top = SIZE;
 
     void push(int x) {
-      if (top >= SIZE) {
+      if (__gc_stack_top <= (size_t) &stack::array) {
         throw std::overflow_error("Stack Overflow");
       }
-      array[++top] = x;
+      array[--top] = x;
       __gc_stack_top = (size_t) &array[top];
     }
 
     int pop() {
-      if (top == -1) {
+      if (__gc_stack_top == __gc_stack_bottom) {
         throw std::out_of_range("Stack Underflow");
       }
-      int i = array[top--];
+      int i = array[top++];
       __gc_stack_top = (size_t) &array[top];
       return i;
     }
 
     int peek() {
-      if (top == -1) {
+      if (__gc_stack_top == __gc_stack_bottom) {
         throw std::out_of_range("Stack Underflow");
       }
       return array[top];
@@ -562,8 +562,8 @@ int main(int argc, char *argv[]) {
 
   std::vector<Token> tokens = disassemble(f);
 
-  __gc_stack_bottom = (size_t) &stack::array[stack::top];
-  __gc_stack_top = (size_t) &stack::array[stack::top];
+  __gc_stack_bottom = (size_t) &stack::array + sizeof(stack::array);
+  __gc_stack_top = (size_t) &stack::array + sizeof(stack::array);
   __init();
 
   std::vector<Scope> scopes;
