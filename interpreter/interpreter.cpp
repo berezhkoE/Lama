@@ -530,30 +530,30 @@ namespace stack {
     const int SIZE = 1024 * 1024;
 
     int array[SIZE];
-    int top = SIZE;
+
+    inline int*& top() {
+      return (int *&) __gc_stack_top;
+    }
 
     void push(int x) {
       if (__gc_stack_top <= (size_t) &stack::array) {
         throw std::overflow_error("Stack Overflow");
       }
-      array[--top] = x;
-      __gc_stack_top = (size_t) &array[top];
+      *(--top()) = x;
     }
 
     int pop() {
       if (__gc_stack_top == __gc_stack_bottom) {
         throw std::out_of_range("Stack Underflow");
       }
-      int i = array[top++];
-      __gc_stack_top = (size_t) &array[top];
-      return i;
+      return *(top()++);
     }
 
     int peek() {
       if (__gc_stack_top == __gc_stack_bottom) {
         throw std::out_of_range("Stack Underflow");
       }
-      return array[top];
+      return *top();
     }
 }
 
